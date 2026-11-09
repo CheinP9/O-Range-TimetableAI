@@ -1,0 +1,42 @@
+.root-pane {
+    -fx-background-color: white;
+}
+
+.section-label {
+    -fx-text-fill: #6B7280;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
+.custom-input {
+    -fx-background-color: #F9FAFB;
+    -fx-border-color: #E5E7EB;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-padding: 12;
+    -fx-text-fill: #111827;
+    -fx-prompt-text-fill: #9CA3AF;
+}
+
+.custom-input:focused {
+    -fx-border-color: #4F46E5;
+    -fx-background-color: white;
+}
+
+.custom-scroll-pane {
+    -fx-background-color: transparent;
+    -fx-background: white;
+}
+
+.custom-scroll-pane .viewport {
+    -fx-background-color: transparent;
+}
+
+.skill-tag {
+    -fx-background-color: #EEF2FF;
+    -fx-text-fill: #4F46E5;
+    -fx-padding: 6 14 6 14;
+    -fx-background-radius: 16;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}

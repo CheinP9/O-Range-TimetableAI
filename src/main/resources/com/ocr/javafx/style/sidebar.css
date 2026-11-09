@@ -1,0 +1,54 @@
+/* sidebar background color */
+.sidebar-root {
+    -fx-background-color: #FFF3E2;
+    /* Màu kem đào ấm lót nền cho Sidebar */
+    -fx-background-image: url("../image/orange_sidebar_bg.png");
+    -fx-background-size: 100% 100%;
+    -fx-background-repeat: no-repeat;
+    -fx-background-position: center center;
+    -fx-pref-width: 220;
+    -fx-border-color: #FFE0BD;
+    /* Viền ngăn cách màu cam nhạt tinh tế */
+    -fx-border-width: 0 1 0 0;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.05), 10, 0, 2, 0);
+}
+
+/*separator*/
+.separator .line {
+    -fx-border-color: #D4D4AA;
+    -fx-border-width: 0.5;
+}
+
+.button.sidebar-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: #374151;
+
+    -fx-font-size: 14;
+    -fx-font-weight: 700;
+
+    -fx-alignment: CENTER-LEFT;
+    -fx-padding: 10 15;
+    -fx-background-radius: 10;
+    -fx-graphic-text-gap: 12;
+
+    -fx-cursor: hand;
+}
+
+.button.sidebar-button-active {
+    -fx-background-color: #FFE5CC;
+    /* Nền cam pastel nhẹ nhàng */
+    -fx-text-fill: #E65100;
+    /* Chữ màu cam đậm nổi bật */
+    -fx-border-color: #F36F18;
+    /* Vạch cam bên trái */
+    -fx-border-width: 0 0 0 4;
+    /* Vạch 4px bên mép trái */
+    -fx-background-radius: 10;
+    -fx-padding: 10 15 10 11;
+}
+
+.button.sidebar-button:hover {
+    -fx-background-color: rgba(255, 140, 42, 0.15);
+    /* Hover cam nhạt trong suốt */
+    -fx-translate-x: 2;
+}

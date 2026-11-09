@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ProgressIndicator?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.Spinner?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+
+<BorderPane fx:id="timetableRoot" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" prefHeight="600.0" prefWidth="960.0" styleClass="timetable-root" stylesheets="@../style/timetable.css" xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.ocr.javafx.controller.timetable.TimetableController">
+
+    <top>
+        <VBox spacing="10.0" styleClass="timetable-toolbar">
+            <padding>
+                <Insets bottom="12.0" left="14.0" right="14.0" top="12.0" />
+            </padding>
+            <HBox alignment="CENTER_LEFT" spacing="12.0">
+                <Button mnemonicParsing="false" onAction="#onBackWeekClicked" styleClass="timetable-btn-outline" text="&lt; Tuần trước" />
+                <Label fx:id="monthYearLabel" styleClass="timetable-week-label" text="Tuần: …" />
+                <Button mnemonicParsing="false" onAction="#onNextWeekClicked" styleClass="timetable-btn-outline" text="Tuần tới &gt;" />
+                <HBox alignment="CENTER_LEFT" spacing="8.0" HBox.hgrow="ALWAYS">
+                    <Label styleClass="timetable-plan-label" text="Kế hoạch:" />
+                    <ComboBox fx:id="planCombo" prefWidth="210.0" promptText="Chọn Learning Plan" styleClass="timetable-plan-combo" />
+                    <Label styleClass="timetable-plan-label" text="Số buổi/tuần:" />
+                    <Spinner fx:id="sessionsSpinner" prefWidth="72.0" />
+                    <Label styleClass="timetable-plan-label" text="Thời lượng:" />
+                    <ComboBox fx:id="durationCombo" prefWidth="110.0" styleClass="timetable-plan-combo" />
+                </HBox>
+            </HBox>
+            <HBox alignment="CENTER_LEFT" spacing="10.0">
+                <Button fx:id="btnGenerateAi" mnemonicParsing="false" onAction="#onGenerateAi" style="-fx-background-color: #FF8C42;" styleClass="timetable-btn-primary" text="Tạo lịch bằng AI" />
+                <Button fx:id="btnAddManual" mnemonicParsing="false" onAction="#onAddManual" styleClass="timetable-btn-secondary" text="Thêm sự kiện / Lịch cá nhân" textAlignment="CENTER" />
+                <Button mnemonicParsing="false" onAction="#onExportIcs" styleClass="timetable-btn-secondary" text="Xuất .ics" />
+                <Region HBox.hgrow="ALWAYS" />
+                <HBox fx:id="draftStatusBox" alignment="CENTER_LEFT" managed="false" spacing="8.0" styleClass="draft-status-banner" visible="false">
+                    <Label fx:id="draftStatusLabel" styleClass="draft-status-label" text="⚡ AI đã xếp các buổi học dự kiến:" />
+                    <Button fx:id="btnApplyDraft" mnemonicParsing="false" onAction="#onSaveToDb" styleClass="timetable-btn-success" text="✓ Áp dụng lịch này" />
+                    <Button fx:id="btnDiscardDraft" mnemonicParsing="false" onAction="#onDiscardDrafts" styleClass="timetable-btn-outline-danger" text="✕ Bỏ qua (Hủy bản nháp)" />
+                </HBox>
+                <Button fx:id="btnSaveDb" mnemonicParsing="false" onAction="#onSaveToDb" styleClass="timetable-btn-success" text="💾 Lưu lịch" />
+            </HBox>
+        </VBox>
+    </top>
+
+    <center>
+        <StackPane maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" BorderPane.alignment="CENTER">
+            <ScrollPane fx:id="timetableScroll" fitToHeight="false" fitToWidth="true" hbarPolicy="AS_NEEDED" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" pannable="true" styleClass="timetable-scroll" vbarPolicy="AS_NEEDED">
+                <content>
+                    <GridPane fx:id="timetableGrid" hgap="2.0" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" styleClass="timetable-grid-wrapper" vgap="2.0">
+                        <padding>
+                            <Insets bottom="10.0" left="10.0" right="10.0" top="10.0" />
+                        </padding>
+                    </GridPane>
+                </content>
+            </ScrollPane>
+            <ProgressIndicator fx:id="loadingIndicator" maxHeight="72.0" maxWidth="72.0" mouseTransparent="true" visible="false" StackPane.alignment="CENTER" />
+        </StackPane>
+    </center>
+</BorderPane>

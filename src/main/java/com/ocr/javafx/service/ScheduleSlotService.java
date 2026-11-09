@@ -1,0 +1,66 @@
+package com.ocr.javafx.service;
+
+import com.ocr.javafx.entity.ScheduleSlot;
+import com.ocr.javafx.repository.ScheduleSlotRepository;
+
+import java.time.DayOfWeek;
+import java.time.Duration;
+import java.time.LocalTime;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+public class ScheduleSlotService {
+    private final ScheduleSlotRepository repository;
+
+    public ScheduleSlotService(ScheduleSlotRepository repository) {
+        this.repository = repository;
+    }
+
+    public Map<DayOfWeek, Double> getLearningHoursByDay(Long userId) {
+        List<ScheduleSlot> sessions = repository.findByUserId(userId);
+
+        Map<DayOfWeek, Double> result = new HashMap<>();
+
+        for (ScheduleSlot s : sessions) {
+            if (s.isLearningPlanStudy() && s.isCompleted()) {
+                long sessionDuration = Duration.between(s.getStartTime(), s.getEndTime()).toMinutes();
+                DayOfWeek day = s.getDate().getDayOfWeek();
+
+                double hours = sessionDuration / 60.0;
+
+                result.put(day, result.getOrDefault(day, 0.0) + hours);
+            }
+        }
+
+        return result;
+    }
+
+    public Map<String, Double> getSkillDistribution(Long userId){
+        List<ScheduleSlot> sessions = repository.findByUserId(userId);
+
+        Map<String, Double> result = new HashMap<>();
+
+        for (ScheduleSlot s : sessions) {
+            if (!s.isLearningPlanStudy()) {
+                continue;
+            }
+
+            long sessionDuration = Duration.between(s.getStartTime(), s.getEndTime()).toMinutes();
+            String name = truncate(s.getPlan().getTitle(), 15);
+
+            double hours = sessionDuration / 60.0;
+
+            result.put(name, result.getOrDefault(name, 0.0) + hours);
+        }
+
+        return result;
+    }
+
+    private String truncate(String text, int maxLength) {
+        if (text == null) return "";
+        return text.length() > maxLength
+                ? text.substring(0, maxLength) + "..."
+                : text;
+    }
+}

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<StackPane fx:controller="com.ocr.javafx.controller.main.MainController"
+           xmlns="http://javafx.com/javafx/17.0.12"
+           xmlns:fx="http://javafx.com/fxml/1"
+           styleClass="global-font"
+           stylesheets="@../style/main.css">
+
+   <BorderPane fx:id="mainLayout">
+
+      <center>
+         <VBox>
+            <fx:include fx:id="topbar" source="../components/topbar.fxml"/>
+            <ScrollPane fx:id="contentPane"
+                        fitToWidth="true"
+                        hbarPolicy="NEVER"
+                        vbarPolicy="ALWAYS"
+                        VBox.vgrow="ALWAYS"/>
+         </VBox>
+      </center>
+
+      <left>
+         <fx:include fx:id="sidebar" source="../components/sidebar.fxml"/>
+      </left>
+
+   </BorderPane>
+
+</StackPane>

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.text.Font?>
+
+<VBox prefHeight="700.0" prefWidth="1000.0" spacing="30.0" style="-fx-background-color: white;" stylesheets="@../style/plan-details.css" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.ocr.javafx.controller.views.PlanDetailsController">
+    <padding>
+        <!-- Tăng padding toàn dụng để giao diện "thở" được như Linear -->
+        <Insets bottom="40.0" left="50.0" right="50.0" top="40.0" />
+    </padding>
+
+    <HBox alignment="CENTER_LEFT" spacing="20.0">
+        <Button onAction="#handleBack" style="-fx-background-color: transparent; -fx-cursor: hand; -fx-padding: 0;" text="←" textFill="#64748B">
+            <font><Font name="System Bold" size="28.0" /></font>
+        </Button>
+        <VBox spacing="5.0">
+            <Label fx:id="lblTitle" text="Hình học 8" textFill="#0F172A">
+                <font><Font name="System Bold" size="26.0" /></font>
+            </Label>
+            <Label fx:id="lblDomain" text="Toán học lớp 8" textFill="#64748B">
+                <font><Font size="14.0" /></font>
+            </Label>
+        </VBox>
+    </HBox>
+
+    <Separator style="-fx-opacity: 0.5;" />
+
+    <Label text="Lịch học" textFill="#0F172A">
+        <font><Font name="System Bold" size="20.0" /></font>
+    </Label>
+
+    <TableView fx:id="tableSlots" VBox.vgrow="ALWAYS" styleClass="notion-table">
+        <columns>
+            <TableColumn fx:id="colDate" prefWidth="120.0" text="Ngày" />
+            <TableColumn fx:id="colTime" prefWidth="140.0" text="Thời gian" />
+            <TableColumn fx:id="colTopic" prefWidth="220.0" text="Chủ đề" />
+            <TableColumn fx:id="colSubTopic" prefWidth="320.0" text="Nội dung chi tiết" />
+            <TableColumn fx:id="colStatus" prefWidth="120.0" text="Trạng thái" />
+        </columns>
+        <columnResizePolicy>
+            <TableView fx:constant="CONSTRAINED_RESIZE_POLICY" />
+        </columnResizePolicy>
+    </TableView>
+</VBox>
