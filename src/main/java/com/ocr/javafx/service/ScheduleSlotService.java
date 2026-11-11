@@ -24,6 +24,9 @@ public class ScheduleSlotService {
 
         for (ScheduleSlot s : sessions) {
             if (s.isLearningPlanStudy() && s.isCompleted()) {
+                if (s.getStartTime() == null || s.getEndTime() == null || s.getDate() == null) {
+                    continue;
+                }
                 long sessionDuration = Duration.between(s.getStartTime(), s.getEndTime()).toMinutes();
                 DayOfWeek day = s.getDate().getDayOfWeek();
 
@@ -43,6 +46,9 @@ public class ScheduleSlotService {
 
         for (ScheduleSlot s : sessions) {
             if (!s.isLearningPlanStudy()) {
+                continue;
+            }
+            if (s.getStartTime() == null || s.getEndTime() == null || s.getPlan() == null) {
                 continue;
             }
 

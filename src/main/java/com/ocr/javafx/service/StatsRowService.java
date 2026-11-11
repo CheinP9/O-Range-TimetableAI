@@ -21,20 +21,20 @@ public class StatsRowService {
     }
 
     public double getTotalLearningHours(Long userId) {
+        List<ScheduleSlot> sessions = scheduleSlotRepository.findByUserId(userId);
+        double totalMinutes = 0;
 
-            List<ScheduleSlot> sessions = scheduleSlotRepository.findByUserId(userId);
-
-            double totalMinutes = 0;
-
-            for (ScheduleSlot s : sessions) {
-                if (s.isLearningPlanStudy() && s.isCompleted()) {
+        for (ScheduleSlot s : sessions) {
+            if (s.isLearningPlanStudy() && s.isCompleted()) {
+                if (s.getStartTime() != null && s.getEndTime() != null) {
                     long sessionDuration = Duration.between(s.getStartTime(), s.getEndTime()).toMinutes();
                     totalMinutes += sessionDuration;
                 }
             }
-
-            return totalMinutes / 60.0;
         }
+
+        return totalMinutes / 60.0;
+    }
 
     public long getCompletedPlans(Long userId) {
         return learningPlanRepository.countByUserIdAndStatus(userId, LearningPlanStatus.COMPLETED);
@@ -50,7 +50,7 @@ public class StatsRowService {
         long not_started = learningPlanRepository.countByUserIdAndStatus(userId, LearningPlanStatus.NOT_STARTED);
         long startedPlans = total - not_started;
 
-        if (startedPlans == 0) return 0;
+        if (startedPlans <= 0) return 0;
         return (completed * 100.0) / startedPlans;
     }
 }

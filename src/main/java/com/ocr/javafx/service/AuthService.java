@@ -86,7 +86,10 @@ public class AuthService {
     }
 
     public AuthResponse changePassword(Long userId, ChangePasswordRequest request) {
-        if (request.getOldPassword().isEmpty() || request.getNewPassword().isEmpty()) {
+        if (request == null
+                || request.getOldPassword() == null || request.getOldPassword().isBlank()
+                || request.getNewPassword() == null || request.getNewPassword().isBlank()
+                || request.getConfirmPassword() == null) {
             return new AuthResponse(false, "Vui lòng nhập đầy đủ thông tin.", null);
         }
 

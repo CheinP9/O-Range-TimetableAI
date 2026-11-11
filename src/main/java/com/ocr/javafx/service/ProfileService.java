@@ -138,23 +138,30 @@ public class ProfileService {
         LocalDate today = LocalDate.now();
 
         LocalDate latestTaskDate = (LocalDate) dailyStatus.get(0)[0];
-
         if (latestTaskDate.isBefore(today.minusDays(1))) {
             return 0;
         }
 
+        LocalDate expectedDate = null;
         for (Object[] row : dailyStatus) {
             LocalDate date = (LocalDate) row[0];
             int isFullyCompleted = ((Number) row[1]).intValue();
 
+            // Nếu là ngày hôm nay và chưa hoàn thành hết bài, bỏ qua hôm nay để streak tiếp tục từ hôm qua
+            if (date.equals(today) && isFullyCompleted != 1) {
+                continue;
+            }
+
+            if (expectedDate != null && !date.equals(expectedDate)) {
+                // Có ngày ngắt quãng giữa chừng -> đứt chuỗi streak
+                break;
+            }
+
             if (isFullyCompleted == 1) {
                 streak++;
+                expectedDate = date.minusDays(1);
             } else {
-                if (date.equals(today)) {
-                    continue;
-                } else {
-                    break;
-                }
+                break;
             }
         }
         return streak;

@@ -148,12 +148,13 @@ public class SlotExtractionService {
             if (slot == null || slot.getDate() == null || slot.getStartTime() == null || slot.getEndTime() == null) {
                 continue;
             }
-            boolean matchesDate = Objects.equals(slot.getDate(), targetDate);
+            boolean matchesDate = Objects.equals(slot.getDate(), targetDate) && !slot.isDateExcluded(targetDate);
             boolean matchesRecurring = slot.isPersonal()
                     && slot.isRecurring()
                     && slot.getDate().getDayOfWeek() == targetDate.getDayOfWeek()
                     && !targetDate.isBefore(slot.getDate())
-                    && (slot.getRecurringEndDate() == null || !targetDate.isAfter(slot.getRecurringEndDate()));
+                    && (slot.getRecurringEndDate() == null || !targetDate.isAfter(slot.getRecurringEndDate()))
+                    && !slot.isDateExcluded(targetDate);
 
             if (matchesDate || matchesRecurring) {
                 // Mở rộng biên theo dòng lưới giờ để không bị 2 thẻ đè chung 1 ô giờ trên GridPane

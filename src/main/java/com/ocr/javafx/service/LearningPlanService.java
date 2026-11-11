@@ -149,19 +149,37 @@ public class LearningPlanService {
         );
     }
 
-    public void deletePlanById(Long id) {
-        if (id == null) return;
+    /**
+     * Xóa learning plan cùng các schedule slot thuộc về nó.
+     * Phải xóa slot trước, nếu không ràng buộc khóa ngoại schedule_slots.plan_id
+     * sẽ khiến lệnh DELETE learning_plans thất bại và transaction bị rollback.
+     *
+     * @return true nếu xóa thành công (hoặc plan không còn tồn tại), false nếu lỗi.
+     */
+    public boolean deletePlanById(Long id) {
+        if (id == null) return false;
         Transaction transaction = null;
         try (Session session = HibernateUtil.getSessionFactory().openSession()) {
             transaction = session.beginTransaction();
             LearningPlan plan = session.get(LearningPlan.class, id);
             if (plan != null) {
+                session.createMutationQuery("DELETE FROM ScheduleSlot s WHERE s.plan.id = :planId")
+                        .setParameter("planId", id)
+                        .executeUpdate();
                 session.remove(plan);
             }
             transaction.commit();
+            return true;
         } catch (Exception e) {
-            if (transaction != null) transaction.rollback();
+            if (transaction != null && transaction.isActive()) {
+                try {
+                    transaction.rollback();
+                } catch (Exception rollbackEx) {
+                    rollbackEx.printStackTrace();
+                }
+            }
             e.printStackTrace();
+            return false;
         }
     }
 
@@ -199,10 +217,13 @@ public class LearningPlanService {
                                               Integer durationDays, Integer targetSessions, String intensity) {
         if (planId == null) return null;
         Transaction transaction = null;
-        LearningPlan plan;
         try (Session session = HibernateUtil.getSessionFactory().openSession()) {
             transaction = session.beginTransaction();
-            plan = session.get(LearningPlan.class, planId);
+            LearningPlan plan = session.createQuery(
+                    "SELECT lp FROM LearningPlan lp LEFT JOIN FETCH lp.skills WHERE lp.id = :id",
+                    LearningPlan.class
+            ).setParameter("id", planId).uniqueResult();
+
             if (plan == null) {
                 return null;
             }
@@ -225,17 +246,19 @@ public class LearningPlanService {
                 plan.setIntensity(intensity.trim());
             }
             session.merge(plan);
-            transaction.commit();
-        } catch (Exception e) {
-            if (transaction != null) transaction.rollback();
-            e.printStackTrace();
-            return null;
-        }
 
-        try (Session session = HibernateUtil.getSessionFactory().openSession()) {
             long[] counts = repository.findSlotCountsByPlanId(session, planId);
-            return convertToDTOWithCounts(plan, counts[0], counts[1]);
+            LearningPlanDTO dto = convertToDTOWithCounts(plan, counts[0], counts[1]);
+            transaction.commit();
+            return dto;
         } catch (Exception e) {
+            if (transaction != null && transaction.isActive()) {
+                try {
+                    transaction.rollback();
+                } catch (Exception rollbackEx) {
+                    rollbackEx.printStackTrace();
+                }
+            }
             e.printStackTrace();
             return null;
         }

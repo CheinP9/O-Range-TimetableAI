@@ -43,6 +43,7 @@ build/
 
 # Maven build
 target/
+dependency-reduced-pom.xml
 
 # IDE - IntelliJ
 .idea/

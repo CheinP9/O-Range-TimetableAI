@@ -323,14 +323,41 @@ public class PlanCardController {
 
     @FXML
     private void handleDelete(ActionEvent event) {
-        try {
-            if (onDeleteCallback != null) {
-                onDeleteCallback.run();
-            }
-            Long idToDelete = this.planId;
-            java.util.concurrent.CompletableFuture.runAsync(() -> planService.deletePlanById(idToDelete));
-        } catch (Exception e) {
-            AlertUtils.showError(e.getMessage());
+        Long idToDelete = this.planId;
+        if (idToDelete == null || planService == null) {
+            AlertUtils.showError("Không xác định được kế hoạch cần xóa.");
+            return;
         }
+
+        Alert confirmAlert = new Alert(Alert.AlertType.CONFIRMATION);
+        confirmAlert.setTitle("Xác nhận xóa");
+        confirmAlert.setHeaderText("Xóa kế hoạch học tập");
+        confirmAlert.setContentText("Bạn có chắc chắn muốn xóa kế hoạch \""
+                + (currentPlan != null && currentPlan.getTitle() != null ? currentPlan.getTitle() : "")
+                + "\" và toàn bộ các buổi học liên quan không?");
+        Optional<ButtonType> opt = confirmAlert.showAndWait();
+        if (opt.isEmpty() || opt.get() != ButtonType.OK) {
+            return;
+        }
+
+        javafx.scene.Node source = (event != null && event.getSource() instanceof javafx.scene.Node n) ? n : null;
+        if (source != null) source.setDisable(true);
+
+        java.util.concurrent.CompletableFuture
+                .supplyAsync(() -> planService.deletePlanById(idToDelete))
+                .exceptionally(ex -> {
+                    ex.printStackTrace();
+                    return false;
+                })
+                .thenAccept(success -> javafx.application.Platform.runLater(() -> {
+                    if (Boolean.TRUE.equals(success)) {
+                        if (onDeleteCallback != null) {
+                            onDeleteCallback.run();
+                        }
+                    } else {
+                        if (source != null) source.setDisable(false);
+                        AlertUtils.showError("Không thể xóa kế hoạch học tập. Vui lòng thử lại.");
+                    }
+                }));
     }
 }
