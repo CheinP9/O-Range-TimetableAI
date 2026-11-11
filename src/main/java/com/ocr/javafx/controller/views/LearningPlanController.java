@@ -38,7 +38,9 @@ public class LearningPlanController implements Initializable {
     public void init(ApplicationContext context) {
         this.applicationContext = context;
         this.planService = context.getLearningPlanService();
-        this.currentUserId = context.getSessionManager().getCurrentUserId();
+        this.currentUserId = (context.getSessionManager() != null)
+                ? context.getSessionManager().getCurrentUserId()
+                : null;
         loadLearningPlans();
     }
 
@@ -48,10 +50,16 @@ public class LearningPlanController implements Initializable {
 
     private void loadLearningPlans() {
         flowPanePlans.getChildren().clear();
+        if (currentUserId == null && applicationContext != null && applicationContext.getSessionManager() != null) {
+            currentUserId = applicationContext.getSessionManager().getCurrentUserId();
+        }
+        if (currentUserId == null) {
+            return;
+        }
 
         CompletableFuture.supplyAsync(() -> planService.getAllPlans(currentUserId))
                 .thenAccept(response -> Platform.runLater(() -> {
-                    if (response.isSuccess() && response.getData() != null) {
+                    if (response != null && response.isSuccess() && response.getData() != null) {
                         @SuppressWarnings("unchecked")
                         List<LearningPlanDTO> dtos = (List<LearningPlanDTO>) response.getData();
 
@@ -73,13 +81,16 @@ public class LearningPlanController implements Initializable {
 
                                 flowPanePlans.getChildren().add(cardNode);
 
-                            } catch (IOException e) {
+                            } catch (Exception e) {
                                 System.err.println("Lỗi khi load giao diện PlanCard.fxml: " + e.getMessage());
                                 e.printStackTrace();
                             }
                         }
                     } else {
-                        AlertUtils.showError("Không thể lấy danh sách kế hoạch học tập từ Database.");
+                        String msg = (response != null && response.getResponse() != null)
+                                ? response.getResponse()
+                                : "Không thể lấy danh sách kế hoạch học tập từ Database.";
+                        AlertUtils.showError(msg);
                     }
                 }));
     }

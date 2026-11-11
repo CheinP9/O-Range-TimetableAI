@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -30,20 +31,20 @@ public class LearningPlanService {
     }
 
     public LearningPlanResponse createLearningPlan(User user, LearningPlanRequest request) {
-        if (request.getTitle() == null) {
+        if (request == null || request.getTitle() == null || request.getTitle().isBlank()) {
             return new LearningPlanResponse(false, "Title can not be empty");
         }
         LearningPlan plan = new LearningPlan();
         plan.setUser(user);
-        plan.setTitle(request.getTitle());
-        plan.setGoal(request.getGoal());
-        plan.setIntensity(request.getIntensity());
-        plan.setDomain(request.getDomain());
-        plan.setSkills(request.getSkills());
+        plan.setTitle(request.getTitle().trim());
+        plan.setGoal(request.getGoal() != null ? request.getGoal().trim() : "");
+        plan.setIntensity(request.getIntensity() != null ? request.getIntensity() : "Medium");
+        plan.setDomain(request.getDomain() != null ? request.getDomain().trim() : "");
+        plan.setSkills(request.getSkills() != null ? request.getSkills() : new ArrayList<>());
         plan.setCreatedAt(LocalDateTime.now());
         plan.setStartDate(request.getStartDate() != null ? request.getStartDate() : LocalDate.now());
         plan.setProgress(0);
-        plan.setDurationDays(request.getDurationDays());
+        plan.setDurationDays(request.getDurationDays() != null && request.getDurationDays() > 0 ? request.getDurationDays() : 14);
         int target = (request.getTargetSessions() != null && request.getTargetSessions() > 0)
                 ? request.getTargetSessions()
                 : (request.getDurationDays() != null && request.getDurationDays() > 0 ? request.getDurationDays() : 10);
@@ -54,6 +55,9 @@ public class LearningPlanService {
     }
 
     public LearningPlanResponse getAllPlans(Long userId) {
+        if (userId == null) {
+            return new LearningPlanResponse(true, "No user", Collections.emptyList());
+        }
         try (Session session = HibernateUtil.getSessionFactory().openSession()) {
             List<LearningPlan> rawPlans = repository.findByUserId(session, userId);
             Map<Long, long[]> countsMap = repository.findSlotCountsByUserId(session, userId);
@@ -61,32 +65,30 @@ public class LearningPlanService {
             List<LearningPlanDTO> dtos = rawPlans.stream()
                     .map(plan -> {
                         long[] counts = countsMap.getOrDefault(plan.getId(), new long[]{ 0L, 0L });
-                        return convertToDTOWithCounts(session, plan, counts[0], counts[1]);
+                        return convertToDTOWithCounts(plan, counts[0], counts[1]);
                     })
                     .collect(Collectors.toList());
 
             return new LearningPlanResponse(true, "Fetched successfully", dtos);
         } catch (Exception e) {
             e.printStackTrace();
-            return new LearningPlanResponse(false, "Lỗi khi tải danh sách: " + e.getMessage());
+            return new LearningPlanResponse(false, "Lỗi khi tải danh sách: " + e.getMessage(), Collections.emptyList());
         }
     }
 
     public List<LearningPlan> getPlansForDropdown(Long userId) {
+        if (userId == null) {
+            return Collections.emptyList();
+        }
         try (Session session = HibernateUtil.getSessionFactory().openSession()) {
             return repository.findByUserId(session, userId);
         } catch (Exception e) {
             e.printStackTrace();
-            return java.util.Collections.emptyList();
+            return Collections.emptyList();
         }
     }
 
-    private LearningPlanDTO convertToDTO(Session session, LearningPlan plan) {
-        long[] counts = repository.findSlotCountsByPlanId(session, plan.getId());
-        return convertToDTOWithCounts(session, plan, counts[0], counts[1]);
-    }
-
-    private LearningPlanDTO convertToDTOWithCounts(Session session, LearningPlan plan, long generatedTotal, long completed) {
+    private LearningPlanDTO convertToDTOWithCounts(LearningPlan plan, long generatedTotal, long completed) {
         int requiredSessions = plan.getEffectiveTargetSessions();
         long denominator = requiredSessions > 0 ? requiredSessions : generatedTotal;
 
@@ -103,16 +105,8 @@ public class LearningPlanService {
             expectedStatus = LearningPlanStatus.COMPLETED;
         }
 
-        if (plan.getProgress() == null || plan.getProgress() != progress || plan.getStatus() != expectedStatus) {
-            plan.setProgress(progress);
-            plan.setStatus(expectedStatus);
-            Long planId = plan.getId();
-            int finalProgress = progress;
-            LearningPlanStatus finalStatus = expectedStatus;
-            java.util.concurrent.CompletableFuture.runAsync(() ->
-                    repository.updateProgressAndStatus(planId, finalProgress, finalStatus)
-            );
-        }
+        plan.setProgress(progress);
+        plan.setStatus(expectedStatus);
 
         String startedDate;
         LocalDate startDateLocal = plan.getStartDate();
@@ -156,6 +150,7 @@ public class LearningPlanService {
     }
 
     public void deletePlanById(Long id) {
+        if (id == null) return;
         Transaction transaction = null;
         try (Session session = HibernateUtil.getSessionFactory().openSession()) {
             transaction = session.beginTransaction();
@@ -171,6 +166,7 @@ public class LearningPlanService {
     }
 
     public LearningPlan getPlanDetails(Long planId) {
+        if (planId == null) return null;
         try (Session session = HibernateUtil.getSessionFactory().openSession()) {
             return repository.findByIdWithSlots(session, planId);
         } catch (Exception e) {
@@ -180,13 +176,14 @@ public class LearningPlanService {
     }
 
     public List<LearningPlan> getActivePlans(Long userId) {
+        if (userId == null) return Collections.emptyList();
         try (Session session = HibernateUtil.getSessionFactory().openSession()) {
             List<LearningPlan> rawPlans = repository.findByUserId(session, userId);
             Map<Long, long[]> countsMap = repository.findSlotCountsByUserId(session, userId);
             List<LearningPlan> active = new ArrayList<>();
             for (LearningPlan plan : rawPlans) {
                 long[] counts = countsMap.getOrDefault(plan.getId(), new long[]{ 0L, 0L });
-                convertToDTOWithCounts(session, plan, counts[0], counts[1]);
+                convertToDTOWithCounts(plan, counts[0], counts[1]);
                 if (plan.getStatus() == LearningPlanStatus.IN_PROGRESS) {
                     active.add(plan);
                 }
@@ -194,16 +191,18 @@ public class LearningPlanService {
             return active;
         } catch (Exception e) {
             e.printStackTrace();
-            return java.util.Collections.emptyList();
+            return Collections.emptyList();
         }
     }
 
     public LearningPlanDTO updateLearningPlan(Long planId, String title, String domain, String goal,
                                               Integer durationDays, Integer targetSessions, String intensity) {
+        if (planId == null) return null;
         Transaction transaction = null;
+        LearningPlan plan;
         try (Session session = HibernateUtil.getSessionFactory().openSession()) {
             transaction = session.beginTransaction();
-            LearningPlan plan = session.get(LearningPlan.class, planId);
+            plan = session.get(LearningPlan.class, planId);
             if (plan == null) {
                 return null;
             }
@@ -227,15 +226,23 @@ public class LearningPlanService {
             }
             session.merge(plan);
             transaction.commit();
-            return convertToDTO(session, plan);
         } catch (Exception e) {
             if (transaction != null) transaction.rollback();
+            e.printStackTrace();
+            return null;
+        }
+
+        try (Session session = HibernateUtil.getSessionFactory().openSession()) {
+            long[] counts = repository.findSlotCountsByPlanId(session, planId);
+            return convertToDTOWithCounts(plan, counts[0], counts[1]);
+        } catch (Exception e) {
             e.printStackTrace();
             return null;
         }
     }
 
     public int calculateAndUpdateProgress(Long planId) {
+        if (planId == null) return 0;
         try (Session session = HibernateUtil.getSessionFactory().openSession()) {
             LearningPlan plan = session.get(LearningPlan.class, planId);
             long[] counts = repository.findSlotCountsByPlanId(session, planId);
