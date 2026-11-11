@@ -129,32 +129,39 @@ public class TimetableController {
 
     public void setApplicationContext(ApplicationContext applicationContext) {
         this.applicationContext = applicationContext;
+        LocalDate today = LocalDate.now();
+        currentWeekStart = today.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
+        renderTimetable();
+
         User user = applicationContext.getSessionManager().getCurrentUser();
         if (user != null && user.getId() != null) {
+            Long userId = user.getId();
             LearningPlanService planService = applicationContext.getLearningPlanService();
-            planCombo.getItems().setAll(planService.getPlansForDropdown(user.getId()));
-            if (!planCombo.getItems().isEmpty()) {
-                planCombo.getSelectionModel().selectFirst();
-            }
-            List<ScheduleSlot> loaded = applicationContext.getScheduleSlotRepository()
-                    .findByUserIdOrderByDateAndStart(user.getId());
-            for (ScheduleSlot s : loaded) {
-                if (s.getStatus() == null) {
-                    s.setStatus(ScheduleStatus.PERSISTED);
+            CompletableFuture.runAsync(() -> {
+                List<LearningPlan> userPlans = planService.getPlansForDropdown(userId);
+                List<ScheduleSlot> loaded = applicationContext.getScheduleSlotRepository()
+                        .findByUserIdOrderByDateAndStart(userId);
+                for (ScheduleSlot s : loaded) {
+                    if (s.getStatus() == null) {
+                        s.setStatus(ScheduleStatus.PERSISTED);
+                    }
+                    if (s.isPersonal() && s.isRecurring() && s.getRecurringEndDate() == null && s.getDate() != null) {
+                        s.setRecurringEndDate(s.getDate().plusWeeks(4));
+                        applicationContext.getScheduleSlotRepository().save(s);
+                    }
                 }
-                if (s.isPersonal() && s.isRecurring() && s.getRecurringEndDate() == null && s.getDate() != null) {
-                    s.setRecurringEndDate(s.getDate().plusWeeks(4));
-                    applicationContext.getScheduleSlotRepository().save(s);
-                }
-            }
-            slots.setAll(loaded);
+                Platform.runLater(() -> {
+                    planCombo.getItems().setAll(userPlans);
+                    if (!planCombo.getItems().isEmpty()) {
+                        planCombo.getSelectionModel().selectFirst();
+                    }
+                    slots.setAll(loaded);
+                });
+            });
         } else {
             planCombo.getItems().clear();
             slots.clear();
         }
-        LocalDate today = LocalDate.now();
-        currentWeekStart = today.with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY));
-        renderTimetable();
     }
 
     @FXML
@@ -623,52 +630,61 @@ public class TimetableController {
 
         List<ScheduleSlot> slotsToSave = new ArrayList<>(slots);
         List<ScheduleSlot> slotsToDelete = new ArrayList<>(deletedSlots);
+        deletedSlots.clear();
 
-        try {
-            applicationContext.getScheduleSlotRepository()
-                    .saveChanges(slotsToSave, slotsToDelete);
+        updateDraftBanner();
+        renderTimetable();
+        setBusy(true);
 
-            deletedSlots.clear();
+        User currentUser = applicationContext.getSessionManager() != null
+                ? applicationContext.getSessionManager().getCurrentUser()
+                : null;
 
-            Set<Long> planIdsToUpdate = new HashSet<>();
-            for (ScheduleSlot slot : slotsToSave) {
-                if (slot.getPlan() != null && slot.getPlan().getId() != null) {
-                    planIdsToUpdate.add(slot.getPlan().getId());
+        CompletableFuture.runAsync(() -> {
+            try {
+                applicationContext.getScheduleSlotRepository()
+                        .saveChanges(slotsToSave, slotsToDelete);
+
+                Set<Long> planIdsToUpdate = new HashSet<>();
+                for (ScheduleSlot slot : slotsToSave) {
+                    if (slot.getPlan() != null && slot.getPlan().getId() != null) {
+                        planIdsToUpdate.add(slot.getPlan().getId());
+                    }
                 }
-            }
-            for (ScheduleSlot slot : slotsToDelete) {
-                if (slot.getPlan() != null && slot.getPlan().getId() != null) {
-                    planIdsToUpdate.add(slot.getPlan().getId());
+                for (ScheduleSlot slot : slotsToDelete) {
+                    if (slot.getPlan() != null && slot.getPlan().getId() != null) {
+                        planIdsToUpdate.add(slot.getPlan().getId());
+                    }
                 }
-            }
-            for (Long planId : planIdsToUpdate) {
-                applicationContext.getLearningPlanService().calculateAndUpdateProgress(planId);
-            }
+                for (Long planId : planIdsToUpdate) {
+                    applicationContext.getLearningPlanService().calculateAndUpdateProgress(planId);
+                }
 
-            User currentUser = applicationContext.getSessionManager() != null 
-                    ? applicationContext.getSessionManager().getCurrentUser() 
-                    : null;
-            CompletableFuture.runAsync(() -> {
                 try {
-                    String email = (currentUser != null && currentUser.getEmail() != null) 
-                            ? currentUser.getEmail() 
+                    String email = (currentUser != null && currentUser.getEmail() != null)
+                            ? currentUser.getEmail()
                             : "";
                     MailSyncService.getInstance().syncSlots(slotsToSave, slotsToDelete, email);
                 } catch (Exception ex) {
                     System.err.println("Mail sync error: " + ex.getMessage());
                 }
-            });
 
-            updateDraftBanner();
-            renderTimetable();
-
-            alert(Alert.AlertType.INFORMATION, "Đã lưu",
-                    "Đã áp dụng và lưu toàn bộ lịch xuống cơ sở dữ liệu thành công.");
-        } catch (Exception e) {
-            e.printStackTrace();
-            alert(Alert.AlertType.ERROR, "Lỗi lưu",
-                    e.getMessage() != null ? e.getMessage() : "Không lưu được lịch.");
-        }
+                Platform.runLater(() -> {
+                    setBusy(false);
+                    updateDraftBanner();
+                    renderTimetable();
+                    alert(Alert.AlertType.INFORMATION, "Đã lưu",
+                            "Đã áp dụng và lưu toàn bộ lịch xuống cơ sở dữ liệu thành công.");
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+                Platform.runLater(() -> {
+                    setBusy(false);
+                    alert(Alert.AlertType.ERROR, "Lỗi lưu",
+                            e.getMessage() != null ? e.getMessage() : "Không lưu được lịch.");
+                });
+            }
+        });
     }
 
     private String formatToIcalDateTime(LocalDate date, LocalTime time) {
@@ -1024,17 +1040,17 @@ public class TimetableController {
             slots.add(slot);
         }
 
-        // Tự động lưu ngay xuống CSDL đối với các sự kiện đã lưu / lịch cá nhân để không bị mất ngày kết thúc lặp khi chuyển màn hình
+        // Tự động lưu ngay xuống CSDL ở luồng nền đối với các sự kiện đã lưu / lịch cá nhân
         if (!slot.isDraft() && applicationContext != null) {
-            applicationContext.getScheduleSlotRepository().save(slot);
-            if (slot.getPlan() != null && slot.getPlan().getId() != null) {
-                applicationContext.getLearningPlanService().calculateAndUpdateProgress(slot.getPlan().getId());
-            }
             User currentUser = applicationContext.getSessionManager() != null
                     ? applicationContext.getSessionManager().getCurrentUser()
                     : null;
             CompletableFuture.runAsync(() -> {
                 try {
+                    applicationContext.getScheduleSlotRepository().save(slot);
+                    if (slot.getPlan() != null && slot.getPlan().getId() != null) {
+                        applicationContext.getLearningPlanService().calculateAndUpdateProgress(slot.getPlan().getId());
+                    }
                     String email = (currentUser != null && currentUser.getEmail() != null)
                             ? currentUser.getEmail()
                             : "";
@@ -1456,7 +1472,7 @@ public class TimetableController {
                 if (choice.get() == btnOnlyThisWeek) {
                     slot.addExcludedDate(occurrenceDate);
                     if (!slot.isDraft() && applicationContext != null) {
-                        applicationContext.getScheduleSlotRepository().save(slot);
+                        CompletableFuture.runAsync(() -> applicationContext.getScheduleSlotRepository().save(slot));
                     }
                     NotificationUtils.showSuccess("Đã xóa sự kiện khỏi tuần "
                             + occurrenceDate.format(DateTimeFormatter.ofPattern("dd/MM"))
@@ -1466,7 +1482,7 @@ public class TimetableController {
                 } else {
                     if (!slot.isDraft()) {
                         if (slot.getId() != null && applicationContext != null) {
-                            applicationContext.getScheduleSlotRepository().delete(slot);
+                            CompletableFuture.runAsync(() -> applicationContext.getScheduleSlotRepository().delete(slot));
                         } else {
                             markDeletedIfPersisted(slot);
                         }
@@ -1480,10 +1496,13 @@ public class TimetableController {
 
             if (!slot.isDraft()) {
                 if (slot.getId() != null && applicationContext != null) {
-                    applicationContext.getScheduleSlotRepository().delete(slot);
-                    if (slot.getPlan() != null && slot.getPlan().getId() != null) {
-                        applicationContext.getLearningPlanService().calculateAndUpdateProgress(slot.getPlan().getId());
-                    }
+                    Long planId = (slot.getPlan() != null) ? slot.getPlan().getId() : null;
+                    CompletableFuture.runAsync(() -> {
+                        applicationContext.getScheduleSlotRepository().delete(slot);
+                        if (planId != null) {
+                            applicationContext.getLearningPlanService().calculateAndUpdateProgress(planId);
+                        }
+                    });
                 } else {
                     markDeletedIfPersisted(slot);
                 }
@@ -1519,13 +1538,18 @@ public class TimetableController {
             completeToggle.setOnAction(ev -> {
                 ev.consume();
                 slot.setCompleted(completeToggle.isSelected());
-                if (!slot.isDraft() && applicationContext != null) {
-                    applicationContext.getScheduleSlotRepository().save(slot);
-                }
-                if (slot.getPlan() != null && slot.getPlan().getId() != null && applicationContext != null) {
-                    applicationContext.getLearningPlanService().calculateAndUpdateProgress(slot.getPlan().getId());
-                }
                 renderTimetable();
+                if (applicationContext != null) {
+                    Long planId = (slot.getPlan() != null) ? slot.getPlan().getId() : null;
+                    CompletableFuture.runAsync(() -> {
+                        if (!slot.isDraft()) {
+                            applicationContext.getScheduleSlotRepository().save(slot);
+                        }
+                        if (planId != null) {
+                            applicationContext.getLearningPlanService().calculateAndUpdateProgress(planId);
+                        }
+                    });
+                }
             });
 
             if (slot.isCompleted()) {

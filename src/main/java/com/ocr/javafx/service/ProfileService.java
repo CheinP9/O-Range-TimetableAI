@@ -4,14 +4,16 @@ import com.ocr.javafx.config.SessionManager;
 import com.ocr.javafx.dto.request.ProfileRequest;
 import com.ocr.javafx.dto.response.AchievementResponse;
 import com.ocr.javafx.dto.response.ProfileResponse;
+import com.ocr.javafx.entity.ScheduleSlot;
 import com.ocr.javafx.entity.User;
+import com.ocr.javafx.enums.LearningPlanStatus;
 import com.ocr.javafx.repository.LearningPlanRepository;
 import com.ocr.javafx.repository.ScheduleSlotRepository;
 import com.ocr.javafx.repository.UserRepository;
 
+import java.time.Duration;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 public class ProfileService {
 
@@ -31,24 +33,47 @@ public class ProfileService {
     }
 
     public ProfileResponse getProfile(String email) {
-        User user = userRepository.findByEmail(email);
+        User user = sessionManager.getCurrentUser();
+        if (user == null || user.getEmail() == null || !user.getEmail().equalsIgnoreCase(email)) {
+            user = userRepository.findByEmail(email);
+        }
         if (user == null) return null;
 
         int completedPlans = (int) learningPlanRepository.countByUserIdAndStatus(
-                user.getId(), com.ocr.javafx.enums.LearningPlanStatus.COMPLETED);
+                user.getId(), LearningPlanStatus.COMPLETED);
 
-        double hours = scheduleSlotRepository.sumTotalHoursByUserId(user.getId());
+        // Chỉ truy vấn danh sách slot 1 lần duy nhất rồi tính toàn bộ thống kê trên bộ nhớ
+        List<ScheduleSlot> allSlots = scheduleSlotRepository.findByUserId(user.getId());
 
-        List<Object[]> dailyStatus = scheduleSlotRepository.findDailyCompletionStatus(user.getId());
+        double totalMinutes = 0;
+        Set<String> distinctSkills = new HashSet<>();
+        Map<LocalDate, Integer> dailyMinCompletion = new TreeMap<>(Comparator.reverseOrder());
+
+        for (ScheduleSlot s : allSlots) {
+            if (!s.isLearningPlanStudy()) {
+                continue;
+            }
+            if (s.getDate() != null) {
+                int completedFlag = s.isCompleted() ? 1 : 0;
+                dailyMinCompletion.merge(s.getDate(), completedFlag, Math::min);
+            }
+            if (s.isCompleted()) {
+                if (s.getStartTime() != null && s.getEndTime() != null) {
+                    totalMinutes += Duration.between(s.getStartTime(), s.getEndTime()).toMinutes();
+                }
+                if (s.getTopic() != null && !s.getTopic().isBlank()) {
+                    distinctSkills.add(s.getTopic().trim().toLowerCase());
+                }
+            }
+        }
+
+        double hours = totalMinutes / 60.0;
+        List<Object[]> dailyStatus = new ArrayList<>(dailyMinCompletion.size());
+        for (Map.Entry<LocalDate, Integer> entry : dailyMinCompletion.entrySet()) {
+            dailyStatus.add(new Object[]{ entry.getKey(), entry.getValue() });
+        }
         int streak = calculateStreak(dailyStatus);
-
-        // Tính số skills từ danh sách topic của các slot đã xong
-        int skills = (int) scheduleSlotRepository.findByUserId(user.getId()).stream()
-                .filter(s -> s.isLearningPlanStudy())
-                .filter(s -> s.isCompleted() && s.getTopic() != null)
-                .map(s -> s.getTopic().trim().toLowerCase())
-                .distinct()
-                .count();
+        int skills = distinctSkills.size();
 
         ProfileResponse res = new ProfileResponse();
         res.setUsername(user.getUsername());
@@ -66,7 +91,6 @@ public class ProfileService {
     private List<AchievementResponse> buildAchievements(int hours, int plans, int streak) {
         List<AchievementResponse> list = new ArrayList<>();
 
-        // 1. Kế hoạch (Type: plan)
         list.add(calculateCustomTier(plans, new int[]{1, 5, 15, 30}, "plan",
                 new String[]{"Beginner Planner", "Goal Getter", "Strategy Master", "Planning Legend"},
                 new String[]{
@@ -75,7 +99,6 @@ public class ProfileService {
                         "Completed 15 learning plans.",
                         "Completed 30 learning plans."
                 }));
-        // 2. Chuỗi ngày (Type: streak)
         list.add(calculateCustomTier(streak, new int[]{3, 7, 15, 30}, "streak",
                 new String[]{"Habit Starter", "Weekly Warrior", "Unstoppable", "Consistency King"},
                 new String[]{
@@ -84,7 +107,6 @@ public class ProfileService {
                         "Build a 15-day streak.",
                         "Achieve a 30-day ."
                 }));
-        // 3. Kỹ năng (Type: skill - dùng icon plan hoặc tạo mới)
         list.add(calculateCustomTier(hours, new int[]{10, 50, 150, 300}, "hour",
                 new String[]{"Focus Novice", "Deep Learner", "Flow Specialist", "Zen Master"},
                 new String[]{
@@ -106,7 +128,6 @@ public class ProfileService {
         String finalTitle = isUnlocked ? titles[level - 1] : "Locked";
         String finalDesc = isUnlocked ? descriptions[level - 1] : "Reach " + thresholds[0] + " to unlock";
 
-        // Trả về DTO để Controller hiển thị
         return new AchievementResponse(finalTitle, finalDesc, iconType, level, isUnlocked);
     }
 
@@ -145,7 +166,6 @@ public class ProfileService {
         user.setUsername(req.getUsername());
         if (req.getAvatarPath() != null){
             user.setAvatarPath(req.getAvatarPath());
-            System.out.println("SUCCESS");
         }
         userRepository.update(user);
         sessionManager.setCurrentUser(user);

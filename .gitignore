@@ -55,3 +55,4 @@ target/
 mail-server/src/main/resources/application-local.properties
 mail-server/target/
 mail.log
+release/

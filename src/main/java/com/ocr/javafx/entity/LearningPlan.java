@@ -38,7 +38,6 @@ public class LearningPlan {
     private String intensity;
 
     @Enumerated(EnumType.STRING)
-    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(name = "learning_plan_status")
     private LearningPlanStatus status;
 

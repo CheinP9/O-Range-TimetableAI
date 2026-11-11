@@ -11,14 +11,13 @@ import com.ocr.javafx.util.HibernateUtil;
 import org.hibernate.Session;
 import org.hibernate.Transaction;
 
-import org.jetbrains.annotations.NotNull;
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 public class LearningPlanService {
@@ -57,8 +56,13 @@ public class LearningPlanService {
     public LearningPlanResponse getAllPlans(Long userId) {
         try (Session session = HibernateUtil.getSessionFactory().openSession()) {
             List<LearningPlan> rawPlans = repository.findByUserId(session, userId);
+            Map<Long, long[]> countsMap = repository.findSlotCountsByUserId(session, userId);
+
             List<LearningPlanDTO> dtos = rawPlans.stream()
-                    .map(plan -> convertToDTO(session, plan))
+                    .map(plan -> {
+                        long[] counts = countsMap.getOrDefault(plan.getId(), new long[]{ 0L, 0L });
+                        return convertToDTOWithCounts(session, plan, counts[0], counts[1]);
+                    })
                     .collect(Collectors.toList());
 
             return new LearningPlanResponse(true, "Fetched successfully", dtos);
@@ -78,8 +82,11 @@ public class LearningPlanService {
     }
 
     private LearningPlanDTO convertToDTO(Session session, LearningPlan plan) {
-        long generatedTotal = repository.countTotalSlots(session, plan.getId());
-        long completed = repository.countCompletedSlots(session, plan.getId());
+        long[] counts = repository.findSlotCountsByPlanId(session, plan.getId());
+        return convertToDTOWithCounts(session, plan, counts[0], counts[1]);
+    }
+
+    private LearningPlanDTO convertToDTOWithCounts(Session session, LearningPlan plan, long generatedTotal, long completed) {
         int requiredSessions = plan.getEffectiveTargetSessions();
         long denominator = requiredSessions > 0 ? requiredSessions : generatedTotal;
 
@@ -99,10 +106,15 @@ public class LearningPlanService {
         if (plan.getProgress() == null || plan.getProgress() != progress || plan.getStatus() != expectedStatus) {
             plan.setProgress(progress);
             plan.setStatus(expectedStatus);
-            repository.updateProgressAndStatus(plan.getId(), progress, expectedStatus);
+            Long planId = plan.getId();
+            int finalProgress = progress;
+            LearningPlanStatus finalStatus = expectedStatus;
+            java.util.concurrent.CompletableFuture.runAsync(() ->
+                    repository.updateProgressAndStatus(planId, finalProgress, finalStatus)
+            );
         }
 
-        String startedDate = "N/A";
+        String startedDate;
         LocalDate startDateLocal = plan.getStartDate();
         if (startDateLocal == null && plan.getCreatedAt() != null) {
             startDateLocal = plan.getCreatedAt().toLocalDate();
@@ -170,12 +182,20 @@ public class LearningPlanService {
     public List<LearningPlan> getActivePlans(Long userId) {
         try (Session session = HibernateUtil.getSessionFactory().openSession()) {
             List<LearningPlan> rawPlans = repository.findByUserId(session, userId);
+            Map<Long, long[]> countsMap = repository.findSlotCountsByUserId(session, userId);
+            List<LearningPlan> active = new ArrayList<>();
             for (LearningPlan plan : rawPlans) {
-                convertToDTO(session, plan);
+                long[] counts = countsMap.getOrDefault(plan.getId(), new long[]{ 0L, 0L });
+                convertToDTOWithCounts(session, plan, counts[0], counts[1]);
+                if (plan.getStatus() == LearningPlanStatus.IN_PROGRESS) {
+                    active.add(plan);
+                }
             }
-        } catch (Exception ignored) {
+            return active;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return java.util.Collections.emptyList();
         }
-        return repository.findByUserIdAndStatus(userId, LearningPlanStatus.IN_PROGRESS);
     }
 
     public LearningPlanDTO updateLearningPlan(Long planId, String title, String domain, String goal,
@@ -207,16 +227,9 @@ public class LearningPlanService {
             }
             session.merge(plan);
             transaction.commit();
+            return convertToDTO(session, plan);
         } catch (Exception e) {
             if (transaction != null) transaction.rollback();
-            e.printStackTrace();
-            return null;
-        }
-
-        try (Session session = HibernateUtil.getSessionFactory().openSession()) {
-            LearningPlan refreshed = session.get(LearningPlan.class, planId);
-            return refreshed != null ? convertToDTO(session, refreshed) : null;
-        } catch (Exception e) {
             e.printStackTrace();
             return null;
         }
@@ -225,8 +238,9 @@ public class LearningPlanService {
     public int calculateAndUpdateProgress(Long planId) {
         try (Session session = HibernateUtil.getSessionFactory().openSession()) {
             LearningPlan plan = session.get(LearningPlan.class, planId);
-            long generatedTotal = repository.countTotalSlots(session, planId);
-            long completed = repository.countCompletedSlots(session, planId);
+            long[] counts = repository.findSlotCountsByPlanId(session, planId);
+            long generatedTotal = counts[0];
+            long completed = counts[1];
 
             int requiredSessions = plan != null ? plan.getEffectiveTargetSessions() : (int) generatedTotal;
             long denominator = requiredSessions > 0 ? requiredSessions : generatedTotal;

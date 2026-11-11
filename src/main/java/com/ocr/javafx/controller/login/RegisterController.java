@@ -157,7 +157,12 @@ public class RegisterController extends BaseController {
 
 
         registerTask.setOnFailed(e -> {
-            showError("Registration failed. Please try again.");
+            Throwable ex = registerTask.getException();
+            if (ex != null) {
+                ex.printStackTrace();
+            }
+            String msg = (ex != null && ex.getMessage() != null) ? ex.getMessage() : "Registration failed. Please try again.";
+            showError(msg);
             resetButton();
         });
 

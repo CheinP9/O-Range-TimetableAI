@@ -1,25 +1,27 @@
 package com.ocr.javafx;
 
-import com.ocr.javafx.controller.login.LoginController;
 import com.ocr.javafx.controller.login.RegisterController;
-import com.ocr.javafx.repository.UserRepository;
-import com.ocr.javafx.service.AuthService;
+import com.ocr.javafx.util.HibernateUtil;
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
-import javafx.scene.image.Image;
 import javafx.stage.Stage;
 import javafx.stage.StageStyle;
 
+import java.io.File;
 import java.io.IOException;
+import java.net.Socket;
 
 public class MainApplication extends Application {
 
     private ApplicationContext applicationContext;
+    private Process mailServerProcess;
 
     @Override
     public void start(Stage stage) throws IOException {
         applicationContext = new ApplicationContext();
+
+        startBackgroundServices();
 
         FXMLLoader loader = new FXMLLoader(
                 MainApplication.class.getResource("login/register.fxml")
@@ -36,10 +38,76 @@ public class MainApplication extends Application {
         stage.show();
     }
 
+    private void startBackgroundServices() {
+        // 1. Pre-warm Neon Cloud Database connection in background while user is typing
+        Thread dbWarmup = new Thread(() -> {
+            try {
+                HibernateUtil.getSessionFactory();
+            } catch (Throwable ignored) {
+            }
+        }, "db-warmup-thread");
+        dbWarmup.setDaemon(true);
+        dbWarmup.start();
+
+        // 2. Auto-start Orange-MailServer.jar if present and port 8080 is not yet listening
+        Thread mailStarter = new Thread(() -> {
+            try {
+                if (isPortOpen(8080)) {
+                    return;
+                }
+                File mailJar = findMailServerJar();
+                if (mailJar != null && mailJar.exists()) {
+                    File binDir = new File(System.getProperty("java.home"), "bin");
+                    File javawExe = new File(binDir, "javaw.exe");
+                    String javaBin = javawExe.exists()
+                            ? javawExe.getAbsolutePath()
+                            : new File(binDir, "java").getAbsolutePath();
+                    ProcessBuilder pb = new ProcessBuilder(javaBin, "-jar", mailJar.getAbsolutePath());
+                    pb.directory(mailJar.getParentFile());
+                    pb.redirectOutput(new File(mailJar.getParentFile(), "mail.log"));
+                    pb.redirectErrorStream(true);
+                    mailServerProcess = pb.start();
+                }
+            } catch (Throwable ignored) {
+            }
+        }, "mail-server-starter");
+        mailStarter.setDaemon(true);
+        mailStarter.start();
+    }
+
+    private boolean isPortOpen(int port) {
+        try (Socket s = new Socket("127.0.0.1", port)) {
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private File findMailServerJar() {
+        File cwdJar = new File("Orange-MailServer.jar");
+        if (cwdJar.exists()) {
+            return cwdJar.getAbsoluteFile();
+        }
+        try {
+            File appJar = new File(MainApplication.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+            if (appJar.getParentFile() != null) {
+                File sibling = new File(appJar.getParentFile(), "Orange-MailServer.jar");
+                if (sibling.exists()) {
+                    return sibling.getAbsoluteFile();
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
     @Override
     public void stop() {
         if (applicationContext != null) {
             applicationContext.shutdown();
+        }
+        if (mailServerProcess != null && mailServerProcess.isAlive()) {
+            mailServerProcess.destroy();
         }
     }
 

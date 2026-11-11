@@ -25,8 +25,6 @@ public class StatsRowController {
     public void setApplicationContext(ApplicationContext applicationContext) {
         this.applicationContext = applicationContext;
         this.statsRowService = applicationContext.getStatsRowService();
-
-        loadStats();
     }
 
     public void loadStats() {
@@ -40,14 +38,13 @@ public class StatsRowController {
         long inProgress = statsRowService.getInProgressPlans(userId);
         double progress = statsRowService.getProgress(userId);
 
+        applyStats(hours, completed, inProgress, progress);
+    }
+
+    public void applyStats(double hours, long completed, long inProgress, double progress) {
         learningHoursLabel.setText(String.format("%.1f", hours));
         completedPlansLabel.setText(String.valueOf(completed));
         inProgressLabel.setText(String.valueOf(inProgress));
         progressLabel.setText(String.format("%.0f%%", progress));
     }
-
-//    @FXML
-//    public void initialize() {
-//        System.out.println(learningHoursLabel);
-//    }
 }

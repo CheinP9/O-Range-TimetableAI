@@ -324,12 +324,11 @@ public class PlanCardController {
     @FXML
     private void handleDelete(ActionEvent event) {
         try {
-            planService.deletePlanById(this.planId);
-
-
             if (onDeleteCallback != null) {
                 onDeleteCallback.run();
             }
+            Long idToDelete = this.planId;
+            java.util.concurrent.CompletableFuture.runAsync(() -> planService.deletePlanById(idToDelete));
         } catch (Exception e) {
             AlertUtils.showError(e.getMessage());
         }

@@ -1,13 +1,12 @@
 package com.ocr.javafx.controller.components;
 
 import com.ocr.javafx.ApplicationContext;
-import javafx.beans.binding.Bindings;
 import javafx.fxml.FXML;
 import javafx.scene.chart.PieChart;
-import javafx.scene.control.Label;
 import javafx.scene.control.Tooltip;
 import lombok.Setter;
 
+import java.util.Collections;
 import java.util.Map;
 
 public class PiechartController {
@@ -18,8 +17,20 @@ public class PiechartController {
     @Setter
     private ApplicationContext applicationContext;
 
-    public void setupPieChart() {
+    public void initChartLayout() {
+        piechart.setAnimated(false);
+        piechart.setLabelsVisible(true);
+        piechart.setLegendVisible(false);
+        piechart.setClockwise(true);
+        piechart.setStartAngle(90);
 
+        piechart.setMinSize(360, 360);
+        piechart.setPrefSize(400, 400);
+        piechart.setMaxSize(400, 400);
+    }
+
+    public void setupPieChart() {
+        initChartLayout();
         Long userId = applicationContext
                 .getSessionManager()
                 .getCurrentUser()
@@ -28,7 +39,13 @@ public class PiechartController {
         Map<String, Double> data = applicationContext
                 .getLearningChartService()
                 .getSkillDistribution(userId);
+        applyData(data);
+    }
 
+    public void applyData(Map<String, Double> data) {
+        if (data == null) {
+            data = Collections.emptyMap();
+        }
         piechart.getData().clear();
 
         for (Map.Entry<String, Double> entry : data.entrySet()) {
@@ -48,14 +65,5 @@ public class PiechartController {
                 }
             });
         }
-
-        piechart.setLabelsVisible(true);
-        piechart.setLegendVisible(false);
-        piechart.setClockwise(true);
-        piechart.setStartAngle(90);
-
-        piechart.setMinSize(360, 360);
-        piechart.setPrefSize(400, 400);
-        piechart.setMaxSize(400, 400);
     }
 }

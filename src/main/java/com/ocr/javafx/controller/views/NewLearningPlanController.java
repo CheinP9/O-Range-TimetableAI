@@ -139,46 +139,65 @@ public class NewLearningPlanController implements Initializable {
 
     @FXML
     private void handleCreatePlan() {
-        if (txtTitle.getText().trim().isEmpty() || txtDomain.getText().trim().isEmpty()) {
+        String title = txtTitle.getText() != null ? txtTitle.getText().trim() : "";
+        String domain = txtDomain.getText() != null ? txtDomain.getText().trim() : "";
+        String goal = txtGoal.getText() != null ? txtGoal.getText().trim() : "";
+        String intensity = comboIntensity.getValue();
+        int dur = this.duration;
+        int target = this.targetSessions;
+
+        if (title.isEmpty() || domain.isEmpty()) {
             AlertUtils.showAlert(Alert.AlertType.WARNING, "Validation Error", "Title and Domain cannot be empty!");
             return;
         }
+        if (btnCreatePlan != null) {
+            btnCreatePlan.setDisable(true);
+        }
+
         if (editingPlanId != null) {
-            var updated = planService.updateLearningPlan(
-                    editingPlanId,
-                    txtTitle.getText().trim(),
-                    txtDomain.getText().trim(),
-                    txtGoal.getText().trim(),
-                    duration,
-                    targetSessions,
-                    comboIntensity.getValue()
-            );
-            if (updated != null) {
-                AlertUtils.showAlert(Alert.AlertType.INFORMATION, "Success", "Đã cập nhật mục tiêu kế hoạch học tập thành công!");
-                handleBack();
-            } else {
-                AlertUtils.showAlert(Alert.AlertType.ERROR, "Error", "Không thể cập nhật kế hoạch học tập!");
-            }
+            Long planId = editingPlanId;
+            java.util.concurrent.CompletableFuture.supplyAsync(() ->
+                    planService.updateLearningPlan(planId, title, domain, goal, dur, target, intensity)
+            ).thenAccept(updated -> javafx.application.Platform.runLater(() -> {
+                if (btnCreatePlan != null) {
+                    btnCreatePlan.setDisable(false);
+                }
+                if (updated != null) {
+                    AlertUtils.showAlert(Alert.AlertType.INFORMATION, "Success", "Đã cập nhật mục tiêu kế hoạch học tập thành công!");
+                    handleBack();
+                } else {
+                    AlertUtils.showAlert(Alert.AlertType.ERROR, "Error", "Không thể cập nhật kế hoạch học tập!");
+                }
+            }));
             return;
         }
 
-        User currentUser = userRepository.findById(currentUserId);
         LearningPlanRequest request = new LearningPlanRequest(
-                txtTitle.getText().trim(),
-                txtGoal.getText().trim(),
-                comboIntensity.getValue(),
+                title,
+                goal,
+                intensity,
                 new ArrayList<>(),
-                txtDomain.getText().trim(),
-                duration,
-                targetSessions
+                domain,
+                dur,
+                target
         );
-        LearningPlanResponse response = planService.createLearningPlan(currentUser, request);
-        if (response.isSuccess()) {
-            AlertUtils.showAlert(Alert.AlertType.INFORMATION, "Success", "Learning Plan created successfully!");
-            handleBack();
-        } else {
-            AlertUtils.showAlert(Alert.AlertType.ERROR, "Error", response.getResponse());
-        }
+        java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+            User currentUser = applicationContext.getSessionManager().getCurrentUser();
+            if (currentUser == null) {
+                currentUser = userRepository.findById(currentUserId);
+            }
+            return planService.createLearningPlan(currentUser, request);
+        }).thenAccept(response -> javafx.application.Platform.runLater(() -> {
+            if (btnCreatePlan != null) {
+                btnCreatePlan.setDisable(false);
+            }
+            if (response.isSuccess()) {
+                AlertUtils.showAlert(Alert.AlertType.INFORMATION, "Success", "Learning Plan created successfully!");
+                handleBack();
+            } else {
+                AlertUtils.showAlert(Alert.AlertType.ERROR, "Error", response.getResponse());
+            }
+        }));
     }
 
     @FXML

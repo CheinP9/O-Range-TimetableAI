@@ -8,8 +8,10 @@ import com.ocr.javafx.controller.main.MainController;
 import com.ocr.javafx.dto.request.ProfileRequest;
 import com.ocr.javafx.dto.response.AchievementResponse;
 import com.ocr.javafx.dto.response.ProfileResponse;
+import com.ocr.javafx.entity.User;
 import com.ocr.javafx.service.ProfileService;
 import com.ocr.javafx.util.Function.AlertUtils;
+import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
@@ -28,6 +30,7 @@ import lombok.Setter;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
 
 public class ProfileController {
 
@@ -105,27 +108,39 @@ public class ProfileController {
     }
 
     private void loadProfile() {
-        if (sessionManager.getCurrentUser() == null) return;
+        User currentUser = sessionManager.getCurrentUser();
+        if (currentUser == null) return;
 
-        ProfileResponse res = profileService.getProfile(sessionManager.getCurrentUser().getEmail());
-        if (res == null) return;
-
-        txtName.setText(res.getUsername());
-        lblEmail.setText(res.getEmail());
-        lblHours.setText(String.valueOf(res.getTotalHours()));
-        lblPlans.setText(String.valueOf(res.getCompletedPlans()));
-        lblStreak.setText(String.valueOf(res.getCurrentStreak()));
-        lblSessions.setText(String.valueOf(res.getSkillsLearned()));
-
-        if (res.getAvatarPath() != null && !res.getAvatarPath().isEmpty()) {
-            imgAva.setImage(new Image("file:" + res.getAvatarPath()));
+        // Hiển thị ngay thông tin cơ bản có sẵn trong phiên đăng nhập
+        txtName.setText(currentUser.getUsername());
+        lblEmail.setText(currentUser.getEmail());
+        if (currentUser.getAvatarPath() != null && !currentUser.getAvatarPath().isEmpty()) {
+            imgAva.setImage(new Image("file:" + currentUser.getAvatarPath()));
         }
 
-        if (res.getAchievements() != null && res.getAchievements().size() >= 3) {
-            renderAchievementUI(res.getAchievements().get(0), txtTitlePlan, txtDesPlan, imgAchievementPlan);
-            renderAchievementUI(res.getAchievements().get(1), txtTitleStreak, txtStreak, imgAchievementStreak);
-            renderAchievementUI(res.getAchievements().get(2), txtTitleHour, txtDesHour, imgAchievementHour);
-        }
+        String email = currentUser.getEmail();
+        CompletableFuture.supplyAsync(() -> profileService.getProfile(email))
+                .thenAccept(res -> {
+                    if (res == null) return;
+                    Platform.runLater(() -> {
+                        txtName.setText(res.getUsername());
+                        lblEmail.setText(res.getEmail());
+                        lblHours.setText(String.valueOf(res.getTotalHours()));
+                        lblPlans.setText(String.valueOf(res.getCompletedPlans()));
+                        lblStreak.setText(String.valueOf(res.getCurrentStreak()));
+                        lblSessions.setText(String.valueOf(res.getSkillsLearned()));
+
+                        if (res.getAvatarPath() != null && !res.getAvatarPath().isEmpty()) {
+                            imgAva.setImage(new Image("file:" + res.getAvatarPath()));
+                        }
+
+                        if (res.getAchievements() != null && res.getAchievements().size() >= 3) {
+                            renderAchievementUI(res.getAchievements().get(0), txtTitlePlan, txtDesPlan, imgAchievementPlan);
+                            renderAchievementUI(res.getAchievements().get(1), txtTitleStreak, txtStreak, imgAchievementStreak);
+                            renderAchievementUI(res.getAchievements().get(2), txtTitleHour, txtDesHour, imgAchievementHour);
+                        }
+                    });
+                });
     }
 
     private void renderAchievementUI(AchievementResponse data, Label titleLabel, Label descLabel, ImageView imgView) {
@@ -163,12 +178,17 @@ public class ProfileController {
         req.setUsername(txtName.getText());
         req.setAvatarPath(selectedAvatarPath);
 
-        if (profileService.updateProfile(req)) {
-            loadProfile();
-            if (mainController != null && mainController.getTopbarController() != null) {
-                mainController.getTopbarController().setUser(sessionManager.getCurrentUser());
-            }
-        }
+        CompletableFuture.supplyAsync(() -> profileService.updateProfile(req))
+                .thenAccept(updated -> {
+                    if (updated) {
+                        Platform.runLater(() -> {
+                            loadProfile();
+                            if (mainController != null && mainController.getTopbarController() != null) {
+                                mainController.getTopbarController().setUser(sessionManager.getCurrentUser());
+                            }
+                        });
+                    }
+                });
     }
 
     @FXML

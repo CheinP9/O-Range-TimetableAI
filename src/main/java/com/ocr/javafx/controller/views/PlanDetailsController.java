@@ -6,6 +6,7 @@ import com.ocr.javafx.entity.LearningPlan;
 import com.ocr.javafx.entity.ScheduleSlot;
 import com.ocr.javafx.enums.View;
 import com.ocr.javafx.service.LearningPlanService;
+import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
@@ -13,6 +14,8 @@ import javafx.scene.control.Label;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
+
+import java.util.concurrent.CompletableFuture;
 
 public class PlanDetailsController {
 
@@ -91,14 +94,19 @@ public class PlanDetailsController {
     }
 
     private void loadPlanData(Long planId) {
-        LearningPlan plan = planService.getPlanDetails(planId);
-        if (plan != null) {
-            lblTitle.setText(plan.getTitle());
-            lblDomain.setText(plan.getDomain() != null ? plan.getDomain() : "N/A");
+        CompletableFuture.supplyAsync(() -> planService.getPlanDetails(planId))
+                .thenAccept(plan -> {
+                    if (plan != null) {
+                        Platform.runLater(() -> {
+                            lblTitle.setText(plan.getTitle());
+                            lblDomain.setText(plan.getDomain() != null ? plan.getDomain() : "N/A");
 
-            if (plan.getSlots() != null)
-                tableSlots.setItems(FXCollections.observableArrayList(plan.getSlots()));
-        }
+                            if (plan.getSlots() != null) {
+                                tableSlots.setItems(FXCollections.observableArrayList(plan.getSlots()));
+                            }
+                        });
+                    }
+                });
     }
 
     @FXML

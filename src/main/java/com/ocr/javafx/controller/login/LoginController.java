@@ -126,7 +126,12 @@ public class LoginController extends BaseController {
 
         loginTask.setOnFailed(e -> {
             setLoadingState(false);
-            showError("An unexpected error occurred.");
+            Throwable ex = loginTask.getException();
+            if (ex != null) {
+                ex.printStackTrace();
+            }
+            String msg = (ex != null && ex.getMessage() != null) ? ex.getMessage() : "An unexpected error occurred.";
+            showError(msg);
         });
 
         new Thread(loginTask).start();

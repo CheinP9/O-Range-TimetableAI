@@ -10,6 +10,7 @@ import javafx.scene.chart.XYChart;
 import lombok.Setter;
 
 import java.time.DayOfWeek;
+import java.util.Collections;
 import java.util.Map;
 
 public class BarchartController {
@@ -25,8 +26,26 @@ public class BarchartController {
     @Setter
     private ApplicationContext applicationContext;
 
-    public void setupBarchart() {
+    public void initChartAxes() {
+        yAxis.setForceZeroInRange(true);
+        yAxis.setAutoRanging(false);
+        yAxis.setLowerBound(0);
+        yAxis.setUpperBound(8);
+        yAxis.setMinorTickVisible(false);
+        yAxis.setTickUnit(2);
 
+        barchart.setCategoryGap(10);
+        barchart.setBarGap(4);
+        barchart.setPadding(Insets.EMPTY);
+
+        barchart.setAnimated(false);
+        barchart.setLegendVisible(false);
+        xAxis.setLabel("");
+        yAxis.setLabel("");
+    }
+
+    public void setupBarchart() {
+        initChartAxes();
         Long userId = applicationContext
                 .getSessionManager()
                 .getCurrentUser()
@@ -36,32 +55,18 @@ public class BarchartController {
                 applicationContext
                         .getLearningChartService()
                         .getWeeklyLearningData(userId);
+        applyData(data);
+    }
 
-        yAxis.setForceZeroInRange(true);
-        yAxis.setAutoRanging(false);
-        yAxis.setLowerBound(0);
-        yAxis.setUpperBound(8);
-        yAxis.setMinorTickVisible(false);
-        yAxis.setTickUnit(2);
-
-        barchart.setCategoryGap(10);  // default is usually ~20-40
-        barchart.setBarGap(4);
-        barchart.setPadding(Insets.EMPTY);
-
-        barchart.setAnimated(true);
-        barchart.setLegendVisible(false);
-        xAxis.setLabel("");
-        yAxis.setLabel("");
-
+    public void applyData(Map<DayOfWeek, Double> data) {
+        if (data == null) {
+            data = Collections.emptyMap();
+        }
         XYChart.Series<String, Number> series = new XYChart.Series<>();
         series.setName("Weekly Learning Hours");
 
-
-
         for (DayOfWeek day : DayOfWeek.values()) {
-
             Double value = data.getOrDefault(day, 0.0);
-
             series.getData().add(
                     new XYChart.Data<>(day.name().toUpperCase().substring(0, 3), value)
             );

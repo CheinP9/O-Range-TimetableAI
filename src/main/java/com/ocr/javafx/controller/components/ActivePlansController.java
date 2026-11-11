@@ -2,8 +2,6 @@ package com.ocr.javafx.controller.components;
 
 import com.ocr.javafx.ApplicationContext;
 import com.ocr.javafx.entity.LearningPlan;
-import com.ocr.javafx.enums.LearningPlanStatus;
-import com.ocr.javafx.repository.LearningPlanRepository;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.layout.AnchorPane;
@@ -32,7 +30,14 @@ public class ActivePlansController {
         List<LearningPlan> plans = applicationContext
                 .getLearningPlanService()
                 .getActivePlans(userId);
+        applyActivePlans(plans);
+    }
 
+    public void applyActivePlans(List<LearningPlan> plans) {
+        plansContainer.getChildren().clear();
+        if (plans == null) {
+            return;
+        }
         for (LearningPlan plan : plans) {
             try {
                 FXMLLoader loader = new FXMLLoader(

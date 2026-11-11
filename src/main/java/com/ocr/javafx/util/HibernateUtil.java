@@ -1,151 +1,117 @@
-
 package com.ocr.javafx.util;
 
 import com.ocr.javafx.config.AppEnv;
 import org.hibernate.SessionFactory;
 import org.hibernate.cfg.Configuration;
 
+import java.sql.DriverManager;
+
 public class HibernateUtil {
 
-    private static final SessionFactory SESSION_FACTORY =
-            buildSessionFactory();
+    private static final String DEFAULT_NEON_POOLER_URL =
+            "jdbc:postgresql://ep-morning-cell-a1e51jgd-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&connectTimeout=30&socketTimeout=60&loginTimeout=30&reWriteBatchedInserts=true";
+    private static final String DEFAULT_NEON_DIRECT_URL =
+            "jdbc:postgresql://ep-morning-cell-a1e51jgd.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&connectTimeout=30&socketTimeout=60&loginTimeout=30&reWriteBatchedInserts=true";
+    private static final String DEFAULT_NEON_USER = "neondb_owner";
+    private static final String DEFAULT_NEON_PASS = "npg_v2DGzmBT4roA";
 
-    private static SessionFactory buildSessionFactory() {
-        try {
-            Class.forName("org.postgresql.Driver");
+    private static volatile SessionFactory sessionFactory;
 
-            // Đọc cấu hình từ AppEnv
-            String dbUrl = AppEnv.require("DB_URL");
-            String dbUser = AppEnv.require("DB_USER");
-            String dbPassword = AppEnv.getOrDefault(
-                    "DB_PASSWORD", ""
-            );
-
-            // Đọc cấu hình Hibernate
-            Configuration config =
-                    new Configuration().configure();
-
-            // Ghi đè các giá trị mẫu trong hibernate.cfg.xml
-            config.setProperty(
-                    "hibernate.connection.driver_class",
-                    "org.postgresql.Driver"
-            );
-
-            config.setProperty(
-                    "hibernate.connection.url",
-                    dbUrl
-            );
-
-            config.setProperty(
-                    "hibernate.connection.username",
-                    dbUser
-            );
-
-            config.setProperty(
-                    "hibernate.connection.password",
-                    dbPassword
-            );
-
-            SessionFactory sessionFactory = config.buildSessionFactory();
-            applySchemaPatches(sessionFactory);
-            return sessionFactory;
-
-        } catch (Throwable ex) {
-            System.err.println(
-                    "Không thể khởi tạo kết nối Hibernate."
-            );
-            ex.printStackTrace();
-
-            throw new ExceptionInInitializerError(ex);
+    private static String resolveDbUrl() {
+        String envUrl = AppEnv.get("DB_URL");
+        if (envUrl == null || envUrl.isBlank()
+                || envUrl.contains("localhost")
+                || envUrl.contains("127.0.0.1")
+                || envUrl.equals("DB_URL")) {
+            return DEFAULT_NEON_POOLER_URL;
         }
+        if (!envUrl.contains("connectTimeout=")) {
+            envUrl += (envUrl.contains("?") ? "&" : "?") + "connectTimeout=30&socketTimeout=60&loginTimeout=30&reWriteBatchedInserts=true";
+        }
+        return envUrl;
     }
 
-    private static void applySchemaPatches(SessionFactory sf) {
-        try (var session = sf.openSession()) {
-            session.doWork(connection -> {
-                boolean originalAutoCommit = connection.getAutoCommit();
-                try {
-                    connection.setAutoCommit(true);
-                    try (var st = connection.createStatement()) {
-                        // 1. PL/pgSQL block: xóa mọi check constraint liên quan đến schedule_type và chuyển đổi các cột text sang TEXT
-                        String plsql = """
-                            DO $$
-                            DECLARE
-                                r RECORD;
-                                con_name TEXT;
-                            BEGIN
-                                FOR con_name IN (
-                                    SELECT con.conname
-                                    FROM pg_constraint con
-                                    JOIN pg_class rel ON rel.oid = con.conrelid
-                                    WHERE rel.relname = 'schedule_slots'
-                                      AND con.contype = 'c'
-                                      AND pg_get_constraintdef(con.oid) LIKE '%schedule_type%'
-                                ) LOOP
-                                    BEGIN
-                                        EXECUTE 'ALTER TABLE schedule_slots DROP CONSTRAINT IF EXISTS ' || quote_ident(con_name);
-                                    EXCEPTION WHEN OTHERS THEN NULL;
-                                    END;
-                                END LOOP;
-
-                                FOR r IN (
-                                    SELECT column_name 
-                                    FROM information_schema.columns 
-                                    WHERE table_name = 'schedule_slots' 
-                                      AND lower(column_name) IN ('topic', 'subtopic', 'sub_topic', 'resourceurl', 'resource_url', 'reminder_note')
-                                ) LOOP
-                                    BEGIN
-                                        EXECUTE format('ALTER TABLE schedule_slots ALTER COLUMN %I TYPE TEXT', r.column_name);
-                                    EXCEPTION WHEN OTHERS THEN NULL;
-                                    END;
-                                END LOOP;
-                            END $$;
-                        """;
-                        try {
-                            st.execute(plsql);
-                        } catch (Throwable t) {
-                            System.err.println("Schema patch notice (PL/pgSQL): " + t.getMessage());
-                        }
-
-                        // 2. Explicit individual fallback statements & cấu hình các cột Email Reminder
-                        String[] singleStatements = {
-                            "ALTER TABLE schedule_slots DROP CONSTRAINT IF EXISTS schedule_slots_schedule_type_check",
-                            "ALTER TABLE schedule_slots ADD COLUMN IF NOT EXISTS recurring_end_date DATE",
-                            "ALTER TABLE learning_plans ADD COLUMN IF NOT EXISTS start_date DATE",
-                            "ALTER TABLE schedule_slots ALTER COLUMN topic TYPE TEXT",
-                            "ALTER TABLE schedule_slots ALTER COLUMN \"subTopic\" TYPE TEXT",
-                            "ALTER TABLE schedule_slots ALTER COLUMN subtopic TYPE TEXT",
-                            "ALTER TABLE schedule_slots ALTER COLUMN sub_topic TYPE TEXT",
-                            "ALTER TABLE schedule_slots ALTER COLUMN \"resourceUrl\" TYPE TEXT",
-                            "ALTER TABLE schedule_slots ALTER COLUMN resourceurl TYPE TEXT",
-                            "ALTER TABLE schedule_slots ALTER COLUMN resource_url TYPE TEXT",
-                            "ALTER TABLE schedule_slots ADD COLUMN IF NOT EXISTS reminder_enabled BOOLEAN DEFAULT TRUE",
-                            "ALTER TABLE schedule_slots ADD COLUMN IF NOT EXISTS reminder_minutes INTEGER DEFAULT 15",
-                            "ALTER TABLE schedule_slots ADD COLUMN IF NOT EXISTS reminder_message TEXT",
-                            "ALTER TABLE schedule_slots ADD COLUMN IF NOT EXISTS excluded_dates TEXT",
-                            "ALTER TABLE learning_plans ADD COLUMN IF NOT EXISTS target_sessions INTEGER",
-                            "UPDATE schedule_slots SET recurring_end_date = (date + INTERVAL '28 days')::date WHERE is_recurring = true AND recurring_end_date IS NULL AND date IS NOT NULL"
-                        };
-
-                        for (String sql : singleStatements) {
-                            try {
-                                st.execute(sql);
-                            } catch (Throwable ignored) {
-                            }
-                        }
-                    }
-                } finally {
-                    try {
-                        connection.setAutoCommit(originalAutoCommit);
-                    } catch (Throwable ignored) {}
-                }
-            });
-        } catch (Throwable t) {
-            System.err.println("Schema patch warning: " + t.getMessage());
+    private static String resolveDbUser() {
+        String envUrl = AppEnv.get("DB_URL");
+        if (envUrl == null || envUrl.contains("localhost") || envUrl.contains("127.0.0.1")) {
+            return DEFAULT_NEON_USER;
         }
+        String u = AppEnv.get("DB_USER");
+        return (u == null || u.isBlank() || u.equals("postgres")) ? DEFAULT_NEON_USER : u;
+    }
+
+    private static String resolveDbPassword() {
+        String envUrl = AppEnv.get("DB_URL");
+        if (envUrl == null || envUrl.contains("localhost") || envUrl.contains("127.0.0.1")) {
+            return DEFAULT_NEON_PASS;
+        }
+        String p = AppEnv.get("DB_PASSWORD");
+        if (p == null || p.isBlank() || p.contains("your_") || p.equals("cheinquanh23092904")) {
+            return DEFAULT_NEON_PASS;
+        }
+        return p;
+    }
+
+    private static synchronized SessionFactory buildSessionFactoryWithRetry() {
+        if (sessionFactory != null) {
+            return sessionFactory;
+        }
+
+        String primaryUrl = resolveDbUrl();
+        String dbUser = resolveDbUser();
+        String dbPassword = resolveDbPassword();
+        String[] urlsToTry = { primaryUrl, DEFAULT_NEON_DIRECT_URL, DEFAULT_NEON_POOLER_URL };
+
+        Throwable lastError = null;
+        for (int attempt = 0; attempt < urlsToTry.length; attempt++) {
+            String currentUrl = urlsToTry[attempt];
+            try {
+                Class.forName("org.postgresql.Driver");
+                DriverManager.setLoginTimeout(30);
+
+                Configuration config = new Configuration().configure();
+                config.setProperty("hibernate.connection.driver_class", "org.postgresql.Driver");
+                config.setProperty("hibernate.connection.url", currentUrl);
+                config.setProperty("hibernate.connection.username", dbUser);
+                config.setProperty("hibernate.connection.password", dbPassword);
+                config.setProperty("hibernate.connection.pool_size", "5");
+                config.setProperty("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
+                config.setProperty("hibernate.temp.use_jdbc_metadata_defaults", "false");
+                config.setProperty("hibernate.hbm2ddl.auto", "none");
+                config.setProperty("hibernate.jdbc.batch_size", "30");
+                config.setProperty("hibernate.order_inserts", "true");
+                config.setProperty("hibernate.order_updates", "true");
+
+                SessionFactory sf = config.buildSessionFactory();
+                // Kiểm tra nhanh 1 kết nối để đảm bảo pool đã sẵn sàng
+                try (var session = sf.openSession()) {
+                    session.doWork(conn -> {});
+                }
+                sessionFactory = sf;
+                return sessionFactory;
+            } catch (Throwable ex) {
+                lastError = ex;
+                System.err.println("Thử kết nối CSDL lần " + (attempt + 1) + " thất bại (" + currentUrl + "): " + ex.getMessage());
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+
+        System.err.println("Không thể khởi tạo kết nối Hibernate sau nhiều lần thử.");
+        if (lastError != null) {
+            lastError.printStackTrace();
+        }
+        throw new RuntimeException("Không thể kết nối đến máy chủ CSDL. Vui lòng kiểm tra kết nối mạng!", lastError);
     }
 
     public static SessionFactory getSessionFactory() {
-        return SESSION_FACTORY;
+        SessionFactory sf = sessionFactory;
+        if (sf == null) {
+            sf = buildSessionFactoryWithRetry();
+        }
+        return sf;
     }
 }
